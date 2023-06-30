@@ -1,0 +1,3 @@
+torq_it_duplicate_asset_cleanup_homepage:
+    path:     /torq_it_duplicate_asset_cleanup
+    defaults: { _controller: TorqITDuplicateAssetCleanupBundle\Controller\DefaultController::indexAction }

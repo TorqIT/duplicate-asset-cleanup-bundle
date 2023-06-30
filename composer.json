@@ -1,0 +1,18 @@
+{
+    "name": "torqit/duplicate-asset-cleanup-bundle",
+    "type": "pimcore-bundle",
+    "require": {
+    },
+    "autoload": {
+        "psr-4": {
+            "TorqIT\\DuplicateAssetCleanupBundle\\": "src"
+        }
+    },
+    "extra": {
+        "pimcore": {
+            "bundles": [
+                "TorqIT\\DuplicateAssetCleanupBundle\\TorqITDuplicateAssetCleanupBundle"
+            ]
+        }
+    }
+}
