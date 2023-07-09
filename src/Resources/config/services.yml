@@ -16,6 +16,9 @@ services:
         public: true
         tags: ['controller.service_arguments']
 
+#    TorqIT\DuplicateAssetCleanupBundle\DuplicateAssetCleanupBundleInstaller:
+#        public: true
+
 # add more services, or override services that need manual wiring
 #    TorqIT\DuplicateAssetCleanupBundle\ExampleClass:
 #        arguments:
