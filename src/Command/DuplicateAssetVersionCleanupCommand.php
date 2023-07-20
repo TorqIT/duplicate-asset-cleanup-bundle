@@ -80,7 +80,7 @@ EOQ;
 
     private function deleteVersionBinary(int $id, OutputInterface $output)
     {
-        $output->writeln("Deleting verion binary ".$id.".bin");
+        $output->writeln("Deleting version binary $id.bin");
 
         $deletedIdGroup = 10000 * floor($id / 10000);
 
