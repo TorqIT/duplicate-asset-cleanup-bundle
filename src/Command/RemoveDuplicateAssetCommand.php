@@ -46,7 +46,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         return Db::get()->createQueryBuilder()
             ->select("groupedVersions.binaryFileHash", "COUNT(1) AS total")
             ->from("versions", "groupedVersions")
-            ->innerJoin("groupedVersions", "({$this->buildMostRecentUniqueHashVersionQuery()})", "maxVersion", 
+            ->innerJoin("groupedVersions", "({$this->buildMostRecenVersionSubquery()})", "maxVersion", 
                 "groupedVersions.cid = maxVersion.cid AND groupedVersions.versionCount = maxVersion.version")
             ->groupBy("groupedVersions.binaryFileHash")
             ->orderBy("total", "DESC")
@@ -60,7 +60,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         return Db::get()->createQueryBuilder()
             ->select("versions.cid")
             ->from("versions")
-            ->innerJoin("versions", "({$this->buildMostRecentUniqueHashVersionQuery()})", "maxVersion",
+            ->innerJoin("versions", "({$this->buildMostRecenVersionSubquery()})", "maxVersion",
                 "versions.cid = maxVersion.cid AND versions.versionCount = maxVersion.version")
             ->where("binaryFileHash = ?")
             ->setParameter(0, $hash)
@@ -68,12 +68,15 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->fetchFirstColumn();
     }
 
-    private function buildMostRecentUniqueHashVersionQuery()
+    //We can't just query the version table raw since a single asset with 30 versions will show
+    // up 30 times. Instead, we filter our queries by inner joining to a subquery which fetches
+    // the latest version of each asset (which will for sure have the latest binaryFileHash)
+    private function buildMostRecenVersionSubquery()
     {
         return Db::get()->createQueryBuilder()
             ->select("cid", "MAX(versionCount) as version")
             ->from("versions")
-            ->where("binaryFileId IS NULL AND ctype = 'asset'")
+            ->where("ctype = 'asset'")
             ->groupBy("cid")
             ->getSQL();
     }
