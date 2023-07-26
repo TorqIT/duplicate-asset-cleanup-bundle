@@ -30,31 +30,51 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             return 0;
         }
 
-        $result = $this->getAssetIdWithMostDuplicates();
+        $result = $this->getHashWithMostDuplicates();
+        $duplicates = $this->getDuplicateAssetsForHash($result["binaryFileHash"]);
 
-        $this->output->writeln("Removing {$result["total"]} duplicates for asset ID: {$result["targetAssetId"]}");
+        $dupString = implode(", ", $duplicates);
+
+        //This message is temporary and is just here to demonstrate that the query is working
+        $this->output->writeln("Found asset with {$result["total"]} duplicates ($dupString)");
 
         return 0;
     }
 
-    private function getAssetIdWithMostDuplicates()
+    private function getHashWithMostDuplicates()
     {
-        $subQuery = Db::get()->createQueryBuilder()
-            ->select("cid", "MAX(versionCount) as version")
-            ->from("versions")
-            ->where("binaryFileId IS NULL AND ctype = 'asset'")
-            ->groupBy("cid");
-
-        $results = Db::get()->createQueryBuilder()
-            ->select("MIN(groupedVersions.cid) as targetAssetId", "COUNT(1) AS total")
+        return Db::get()->createQueryBuilder()
+            ->select("groupedVersions.binaryFileHash", "COUNT(1) AS total")
             ->from("versions", "groupedVersions")
-            ->innerJoin("groupedVersions", "({$subQuery->getSQL()})", "maxVersion", 
+            ->innerJoin("groupedVersions", "({$this->buildMostRecentUniqueHashVersionQuery()})", "maxVersion", 
                 "groupedVersions.cid = maxVersion.cid AND groupedVersions.versionCount = maxVersion.version")
             ->groupBy("groupedVersions.binaryFileHash")
             ->orderBy("total", "DESC")
             ->setMaxResults(1)
-            ->execute();
+            ->execute()
+            ->fetchAssociative();
+    }
 
-        return $results->fetchAssociative();
+    private function getDuplicateAssetsForHash(string $hash)
+    {
+        return Db::get()->createQueryBuilder()
+            ->select("versions.cid")
+            ->from("versions")
+            ->innerJoin("versions", "({$this->buildMostRecentUniqueHashVersionQuery()})", "maxVersion",
+                "versions.cid = maxVersion.cid AND versions.versionCount = maxVersion.version")
+            ->where("binaryFileHash = ?")
+            ->setParameter(0, $hash)
+            ->execute()
+            ->fetchFirstColumn();
+    }
+
+    private function buildMostRecentUniqueHashVersionQuery()
+    {
+        return Db::get()->createQueryBuilder()
+            ->select("cid", "MAX(versionCount) as version")
+            ->from("versions")
+            ->where("binaryFileId IS NULL AND ctype = 'asset'")
+            ->groupBy("cid")
+            ->getSQL();
     }
 }
