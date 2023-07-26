@@ -39,11 +39,14 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         //This message is temporary and is just here to demonstrate that the query is working
         $this->output->writeln("Found asset with {$result["total"]} duplicates ($dupString)");
 
-        $imageGalleryFields = $this->getImageGalleryFields();
+        $imageGalleryClasses = $this->getImageGalleryClasses();
 
-        foreach($imageGalleryFields as $field)
+        foreach($imageGalleryClasses as $galleryClass)
         {
-            $this->output->writeln("Image Gallery field: {$field["fieldName"]} in class: {$field["className"]}");
+            foreach($galleryClass["fields"] as $field)
+            {
+                $this->output->writeln("Found image gallery: $field in class: {$galleryClass["className"]}");
+            }
         }
 
         return 0;
@@ -89,7 +92,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->getSQL();
     }
 
-    private function getImageGalleryFields()
+    private function getImageGalleryClasses()
     {
         $classDefinitions = (new ClassDefinition\Listing())->load();
 
@@ -97,15 +100,22 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
         foreach($classDefinitions as $def)
         {
+            $classGalleryFields = [];
+
             foreach($def->getFieldDefinitions() as $field)
             {
                 if($field->getFieldtype() === "imageGallery")
                 {
-                    $imageGalleryFields[] = [
-                        "className" => $def->getName(),
-                        "fieldName" => $field->getName()
-                    ];
+                    $classGalleryFields[] = $field->getName();
                 }
+            }
+
+            if(!empty($classGalleryFields))
+            {
+                $imageGalleryFields[] = [
+                    "className" => $def->getName(),
+                    "fields" => $classGalleryFields
+                ];
             }
         }
 
