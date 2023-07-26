@@ -2,10 +2,13 @@
 
 namespace TorqIT\DuplicateAssetCleanupBundle\Command;
 
+use Pimcore;
 use Pimcore\Console\AbstractCommand;
 use Pimcore\Db;
 use Pimcore\Model\Asset;
 use Pimcore\Model\DataObject\ClassDefinition;
+use Pimcore\Model\DataObject\Concrete;
+use Pimcore\Model\DataObject\Listing;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ConfirmationQuestion;
@@ -43,9 +46,16 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
         foreach($imageGalleryClasses as $galleryClass)
         {
-            foreach($galleryClass["fields"] as $field)
+            foreach($duplicates as $duplicateId)
             {
-                $this->output->writeln("Found image gallery: $field in class: {$galleryClass["className"]}");
+                $objects = $this->getObjectsThatReferenceAsset($duplicateId, $galleryClass["className"], $galleryClass["fields"]);
+                $count = count($objects);
+                
+                if($count > 0)
+                {
+                    //This message is temporary and is just here to demonstrate that the query is working
+                    $this->output->writeln("Found $count {$galleryClass["className"]} objects that reference asset ID $duplicateId");
+                }
             }
         }
 
@@ -120,5 +130,24 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         }
 
         return $imageGalleryFields;
+    }
+
+    /**
+     *  @param string[] $galleryFields 
+     *  @return Concrete[]
+    */
+    private function getObjectsThatReferenceAsset(int $assetId, string $className, array $galleryFields)
+    {
+        $listingClass = "Pimcore\Model\DataObject\\$className\Listing";
+
+        /** @var Listing */
+        $listing = new $listingClass();
+
+        foreach($galleryFields as $field)
+        {
+            $listing->addConditionParam("{$field}__images LIKE ?", "%,$assetId,%");
+        }
+
+        return $listing->load();
     }
 }
