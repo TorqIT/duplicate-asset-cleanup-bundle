@@ -5,6 +5,7 @@ namespace TorqIT\DuplicateAssetCleanupBundle\Command;
 use Pimcore\Console\AbstractCommand;
 use Pimcore\Db;
 use Pimcore\Model\Asset;
+use Pimcore\Model\DataObject\ClassDefinition;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ConfirmationQuestion;
@@ -37,6 +38,13 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
         //This message is temporary and is just here to demonstrate that the query is working
         $this->output->writeln("Found asset with {$result["total"]} duplicates ($dupString)");
+
+        $imageGalleryFields = $this->getImageGalleryFields();
+
+        foreach($imageGalleryFields as $field)
+        {
+            $this->output->writeln("Image Gallery field: {$field["fieldName"]} in class: {$field["className"]}");
+        }
 
         return 0;
     }
@@ -79,5 +87,28 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->where("ctype = 'asset'")
             ->groupBy("cid")
             ->getSQL();
+    }
+
+    private function getImageGalleryFields()
+    {
+        $classDefinitions = (new ClassDefinition\Listing())->load();
+
+        $imageGalleryFields = [];
+
+        foreach($classDefinitions as $def)
+        {
+            foreach($def->getFieldDefinitions() as $field)
+            {
+                if($field->getFieldtype() === "imageGallery")
+                {
+                    $imageGalleryFields[] = [
+                        "className" => $def->getName(),
+                        "fieldName" => $field->getName()
+                    ];
+                }
+            }
+        }
+
+        return $imageGalleryFields;
     }
 }
