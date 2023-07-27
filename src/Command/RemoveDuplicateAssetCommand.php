@@ -2,6 +2,7 @@
 
 namespace TorqIT\DuplicateAssetCleanupBundle\Command;
 
+use Exception;
 use Pimcore;
 use Pimcore\Console\AbstractCommand;
 use Pimcore\Db;
@@ -35,18 +36,20 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         }
 
         $result = $this->getHashWithMostDuplicates();
-        $duplicates = $this->getDuplicateAssetsForHash($result["binaryFileHash"]);
-
-        $dupString = implode(", ", $duplicates);
 
         //This message is temporary and is just here to demonstrate that the query is working
-        $this->output->writeln("Found asset with {$result["total"]} duplicates ($dupString)");
+        $this->output->writeln("Found asset with {$result["total"]} duplicates");
+
+        $duplicateIds = $this->getDuplicateAssetsForHash($result["binaryFileHash"]);
+        $baseAsset = $this->findFirstValidAsset($duplicateIds);
+
+        $this->output->writeln("Selected {$baseAsset->getKey()} as the unified asset");
 
         $imageGalleryClasses = $this->getImageGalleryClasses();
 
         foreach($imageGalleryClasses as $galleryClass)
         {
-            foreach($duplicates as $duplicateId)
+            foreach($duplicateIds as $duplicateId)
             {
                 $objects = $this->getObjectsThatReferenceAsset($duplicateId, $galleryClass["className"], $galleryClass["fields"]);
                 $count = count($objects);
@@ -76,6 +79,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->fetchAssociative();
     }
 
+    /** @return int[] */
     private function getDuplicateAssetsForHash(string $hash)
     {
         return Db::get()->createQueryBuilder()
@@ -84,6 +88,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->innerJoin("versions", "({$this->buildMostRecenVersionSubquery()})", "maxVersion",
                 "versions.cid = maxVersion.cid AND versions.versionCount = maxVersion.version")
             ->where("binaryFileHash = ?")
+            ->orderBy("versions.cid")
             ->setParameter(0, $hash)
             ->execute()
             ->fetchFirstColumn();
@@ -100,6 +105,22 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->where("ctype = 'asset'")
             ->groupBy("cid")
             ->getSQL();
+    }
+
+    /** @param int[] $assetIds */
+    private function findFirstValidAsset(array $assetIds)
+    {
+        foreach($assetIds as $assetId)
+        {
+            $asset = Asset::getById($assetId);
+
+            if($asset->getData())
+            {
+                return $asset;
+            }
+        }
+
+        throw new Exception("None of the duplicate assets have an associated file that actually exists");
     }
 
     private function getImageGalleryClasses()
