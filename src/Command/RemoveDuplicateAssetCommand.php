@@ -9,6 +9,7 @@ use Pimcore\Db;
 use Pimcore\Model\Asset;
 use Pimcore\Model\DataObject\ClassDefinition;
 use Pimcore\Model\DataObject\Concrete;
+use Pimcore\Model\DataObject\Data\ImageGallery;
 use Pimcore\Model\DataObject\Listing;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -47,11 +48,11 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
         $imageGalleryClasses = $this->getImageGalleryClasses();
 
-        foreach($imageGalleryClasses as $galleryClass)
+        foreach($duplicateIds as $duplicateId)
         {
-            foreach($duplicateIds as $duplicateId)
+            foreach($imageGalleryClasses as $galleryClass)
             {
-                $objects = $this->getObjectsThatReferenceAsset($duplicateId, $galleryClass["className"], $galleryClass["fields"]);
+                $objects = $this->getObjectsThatReferenceAsset($duplicateId, $galleryClass["className"], $galleryClass["tableId"], $galleryClass["fields"]);
                 $count = count($objects);
                 
                 if($count > 0)
@@ -145,6 +146,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             {
                 $imageGalleryFields[] = [
                     "className" => $def->getName(),
+                    "tableId" => $def->getId(),
                     "fields" => $classGalleryFields
                 ];
             }
@@ -157,17 +159,28 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
      *  @param string[] $galleryFields 
      *  @return Concrete[]
     */
-    private function getObjectsThatReferenceAsset(int $assetId, string $className, array $galleryFields)
+    private function getObjectsThatReferenceAsset(int $assetId, string $className, string $tableId, array $galleryFields)
     {
         $listingClass = "Pimcore\Model\DataObject\\$className\Listing";
 
         /** @var Listing */
         $listing = new $listingClass();
 
+        $listing->onCreateQueryBuilder(
+            function (\Doctrine\DBAL\Query\QueryBuilder $queryBuilder) use($tableId) {
+                $queryBuilder->innerJoin("object_$tableId", 'dependencies', 'deps', 'oo_id = deps.sourceid');
+            }
+        );
+
+        $galleryFilters = [];
+
         foreach($galleryFields as $field)
         {
-            $listing->addConditionParam("{$field}__images LIKE ?", "%,$assetId,%");
+            $galleryFilters[] = "{$field}__images LIKE CONCAT('%,', deps.targetid, ',%')";
         }
+
+        $combinedGalleryFilters = implode(" OR ", $galleryFilters);
+        $listing->setCondition("deps.targetid = ? AND deps.targettype = 'asset' AND deps.sourcetype = 'object' AND ($combinedGalleryFilters)", [$assetId]);
 
         return $listing->load();
     }
