@@ -9,6 +9,7 @@ use Pimcore\Db;
 use Pimcore\Model\Asset;
 use Pimcore\Model\DataObject\ClassDefinition;
 use Pimcore\Model\DataObject\Concrete;
+use Pimcore\Model\DataObject\Data\Hotspotimage;
 use Pimcore\Model\DataObject\Data\ImageGallery;
 use Pimcore\Model\DataObject\Listing;
 use Symfony\Component\Console\Input\InputInterface;
@@ -50,15 +51,19 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
         foreach($duplicateIds as $duplicateId)
         {
-            foreach($imageGalleryClasses as $galleryClass)
+            if($duplicateId !== $baseAsset->getId())
             {
-                $objects = $this->getObjectsThatReferenceAsset($duplicateId, $galleryClass["className"], $galleryClass["tableId"], $galleryClass["fields"]);
-                $count = count($objects);
-                
-                if($count > 0)
-                {
-                    //This message is temporary and is just here to demonstrate that the query is working
-                    $this->output->writeln("Found $count {$galleryClass["className"]} objects that reference asset ID $duplicateId");
+                foreach($imageGalleryClasses as $galleryClass)
+                {   
+                    $objects = $this->getObjectsThatReferenceAsset($duplicateId, $galleryClass["className"], $galleryClass["tableId"], $galleryClass["fields"]);
+                    $count = count($objects);
+                    
+                    if($count > 0)
+                    {
+                        //This message is temporary and is just here to demonstrate that the query is working
+                        $this->output->writeln("Found $count {$galleryClass["className"]} objects that reference asset ID $duplicateId");
+                        $this->replaceAssetReferencesInImageGalleries($duplicateId, $baseAsset, $objects, $galleryClass["fields"]);
+                    }
                 }
             }
         }
@@ -172,16 +177,47 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             }
         );
 
-        $galleryFilters = [];
-
-        foreach($galleryFields as $field)
-        {
-            $galleryFilters[] = "{$field}__images LIKE CONCAT('%,', deps.targetid, ',%')";
-        }
-
-        $combinedGalleryFilters = implode(" OR ", $galleryFilters);
-        $listing->setCondition("deps.targetid = ? AND deps.targettype = 'asset' AND deps.sourcetype = 'object' AND ($combinedGalleryFilters)", [$assetId]);
+        $listing->setCondition("deps.targetid = ? AND deps.targettype = 'asset' AND deps.sourcetype = 'object'", [$assetId]);
 
         return $listing->load();
+    }
+
+    /**
+     *  @param Concrete[] $objects
+     *  @param string[] $galleryFields
+     */
+    private function replaceAssetReferencesInImageGalleries(int $oldAssetId, Asset $newAsset, array $objects, array $galleryFields)
+    {
+        foreach($objects as $object)
+        {
+            foreach($galleryFields as $field)
+            {
+                /** @var ImageGallery */
+                $imageGallery = $object->get($field);
+                $assetIndex = $this->findAssetIndex($imageGallery, $oldAssetId);
+
+                if($assetIndex !== null)
+                {
+                    $items = $imageGallery->getItems();
+                    $items[$assetIndex] = new Hotspotimage($newAsset);
+                    $imageGallery->setItems($items);
+                }   
+            }
+
+            $object->save();
+        }
+    }
+
+    private function findAssetIndex(ImageGallery $gallery, int $targetId)
+    {
+        foreach($gallery->getItems() as $index => $item)
+        {
+            if($item->getImage()->getId() === $targetId)
+            {
+                return $index;
+            }
+        }
+
+        return null;
     }
 }
