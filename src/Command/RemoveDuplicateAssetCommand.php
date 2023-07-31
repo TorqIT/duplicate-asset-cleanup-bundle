@@ -156,11 +156,30 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         return $imageGalleryFields;
     }
 
+    private function replaceAsset(int $oldAssetId, Asset $newAsset, array $imageGalleryClasses)
+    {
+        if($oldAssetId === $newAsset->getId())
+        {
+            return; 
+        }
+
+        foreach($imageGalleryClasses as $galleryClass)
+        {   
+            $objects = $this->getObjectsThatReferenceAsset($oldAssetId, $galleryClass["className"], $galleryClass["tableId"]);
+            $count = count($objects);
+            
+            if($count > 0)
+            {
+                $this->replaceAssetReferencesInImageGalleries($oldAssetId, $newAsset, $objects, $galleryClass["fields"]);
+            }
+        }
+    }
+
     /**
      *  @param string[] $galleryFields 
      *  @return Concrete[]
     */
-    private function getObjectsThatReferenceAsset(int $assetId, string $className, string $tableId, array $galleryFields)
+    private function getObjectsThatReferenceAsset(int $assetId, string $className, string $tableId)
     {
         $listingClass = "Pimcore\Model\DataObject\\$className\Listing";
 
@@ -176,26 +195,6 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         $listing->setCondition("deps.targetid = ? AND deps.targettype = 'asset' AND deps.sourcetype = 'object'", [$assetId]);
 
         return $listing->load();
-    }
-
-    private function replaceAsset(int $oldAssetId, Asset $newAsset, array $imageGalleryClasses)
-    {
-        if($oldAssetId === $newAsset->getId())
-        {
-            return; 
-        }
-
-        foreach($imageGalleryClasses as $galleryClass)
-        {   
-            $objects = $this->getObjectsThatReferenceAsset($oldAssetId, $galleryClass["className"], $galleryClass["tableId"], $galleryClass["fields"]);
-            $count = count($objects);
-            
-            if($count > 0)
-            {
-                $this->replaceAssetReferencesInImageGalleries($oldAssetId, $newAsset, $objects, $galleryClass["fields"]);
-            }
-        }
-        
     }
 
     /**
