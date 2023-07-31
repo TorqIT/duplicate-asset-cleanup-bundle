@@ -2,6 +2,7 @@
 
 namespace TorqIT\DuplicateAssetCleanupBundle\Command;
 
+use Codeception\Lib\Console\Output;
 use Exception;
 use Pimcore;
 use Pimcore\Console\AbstractCommand;
@@ -12,6 +13,7 @@ use Pimcore\Model\DataObject\Concrete;
 use Pimcore\Model\DataObject\Data\Hotspotimage;
 use Pimcore\Model\DataObject\Data\ImageGallery;
 use Pimcore\Model\DataObject\Listing;
+use Symfony\Component\Console\Helper\ProgressBar;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ConfirmationQuestion;
@@ -39,34 +41,28 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
         $result = $this->getHashWithMostDuplicates();
 
-        //This message is temporary and is just here to demonstrate that the query is working
-        $this->output->writeln("Found asset with {$result["total"]} duplicates");
 
         $duplicateIds = $this->getDuplicateAssetsForHash($result["binaryFileHash"]);
         $baseAsset = $this->findFirstValidAsset($duplicateIds);
 
-        $this->output->writeln("Selected {$baseAsset->getKey()} as the unified asset");
-
+        $this->output->writeln("Found asset ({$baseAsset->getKey()}) with {$result["total"]} duplicates");
         $imageGalleryClasses = $this->getImageGalleryClasses();
+
+        $progressBar = null;
+
+        if($output->getVerbosity() < OutputInterface::VERBOSITY_VERBOSE)
+        {
+            $progressBar = new ProgressBar($output, count($duplicateIds));
+        }
 
         foreach($duplicateIds as $duplicateId)
         {
-            if($duplicateId !== $baseAsset->getId())
-            {
-                foreach($imageGalleryClasses as $galleryClass)
-                {   
-                    $objects = $this->getObjectsThatReferenceAsset($duplicateId, $galleryClass["className"], $galleryClass["tableId"], $galleryClass["fields"]);
-                    $count = count($objects);
-                    
-                    if($count > 0)
-                    {
-                        //This message is temporary and is just here to demonstrate that the query is working
-                        $this->output->writeln("Found $count {$galleryClass["className"]} objects that reference asset ID $duplicateId");
-                        $this->replaceAssetReferencesInImageGalleries($duplicateId, $baseAsset, $objects, $galleryClass["fields"]);
-                    }
-                }
-            }
+            $output->writeln("Replacing all instances of asset $duplicateId", OutputInterface::VERBOSITY_VERBOSE);
+            $this->replaceAsset($duplicateId, $baseAsset, $imageGalleryClasses);
+            $progressBar?->advance();
         }
+        
+        $output->writeln("");
 
         return 0;
     }
@@ -180,6 +176,26 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         $listing->setCondition("deps.targetid = ? AND deps.targettype = 'asset' AND deps.sourcetype = 'object'", [$assetId]);
 
         return $listing->load();
+    }
+
+    private function replaceAsset(int $oldAssetId, Asset $newAsset, array $imageGalleryClasses)
+    {
+        if($oldAssetId === $newAsset->getId())
+        {
+            return; 
+        }
+
+        foreach($imageGalleryClasses as $galleryClass)
+        {   
+            $objects = $this->getObjectsThatReferenceAsset($oldAssetId, $galleryClass["className"], $galleryClass["tableId"], $galleryClass["fields"]);
+            $count = count($objects);
+            
+            if($count > 0)
+            {
+                $this->replaceAssetReferencesInImageGalleries($oldAssetId, $newAsset, $objects, $galleryClass["fields"]);
+            }
+        }
+        
     }
 
     /**
