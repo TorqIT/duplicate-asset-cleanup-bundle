@@ -41,6 +41,11 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
         $result = $this->getHashWithMostDuplicates();
 
+        if($result["total"] === 1)
+        {
+            $this->output->writeln("No duplicate assets detected!");
+            return 0;
+        }
 
         $duplicateIds = $this->getDuplicateAssetsForHash($result["binaryFileHash"]);
         $baseAsset = $this->findFirstValidAsset($duplicateIds);
@@ -58,7 +63,13 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         foreach($duplicateIds as $duplicateId)
         {
             $output->writeln("Replacing all instances of asset $duplicateId", OutputInterface::VERBOSITY_VERBOSE);
-            $this->replaceAsset($duplicateId, $baseAsset, $imageGalleryClasses);
+
+            if($duplicateId != $baseAsset->getId())
+            {
+                $this->replaceAsset($duplicateId, $baseAsset, $imageGalleryClasses);
+                $this->checkAssetDependencyAndDelete($duplicateId);
+            }
+
             $progressBar?->advance();
         }
         
@@ -74,6 +85,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->from("versions", "groupedVersions")
             ->innerJoin("groupedVersions", "({$this->buildMostRecenVersionSubquery()})", "maxVersion", 
                 "groupedVersions.cid = maxVersion.cid AND groupedVersions.versionCount = maxVersion.version")
+            ->innerJoin("groupedVersions", "assets", "assets", "assets.id = groupedVersions.cid")
             ->groupBy("groupedVersions.binaryFileHash")
             ->orderBy("total", "DESC")
             ->setMaxResults(1)
@@ -158,11 +170,6 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
     private function replaceAsset(int $oldAssetId, Asset $newAsset, array $imageGalleryClasses)
     {
-        if($oldAssetId === $newAsset->getId())
-        {
-            return; 
-        }
-
         foreach($imageGalleryClasses as $galleryClass)
         {   
             $objects = $this->getObjectsThatReferenceAsset($oldAssetId, $galleryClass["className"], $galleryClass["tableId"]);
@@ -234,5 +241,28 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         }
 
         return null;
+    }
+
+    private function checkAssetDependencyAndDelete($assetId)
+    {
+        $asset = Asset::getById($assetId);
+
+        $count = Db::get()->createQueryBuilder()
+            ->select("COUNT(1)")
+            ->from("dependencies", "deps")
+            ->where("targettype = 'asset' AND targetid = ?")
+            ->setParameter(0, $assetId)
+            ->execute()
+            ->fetchOne();
+
+        if($count > 0)
+        {
+            $this->output->writeln("");
+            $this->output->writeln("<comment>WARNING: {$asset->getKey()} still has $count dependencies and will not be deleted</comment>");
+        }
+        else
+        {
+            $asset->delete();
+        }
     }
 }
