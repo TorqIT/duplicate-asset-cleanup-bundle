@@ -70,30 +70,8 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         {
             $this->output->writeln("Found asset ({$baseAsset->getKey()}) with $duplicateCount duplicates");
         }
-        
-        $imageGalleryClasses = $this->getImageGalleryClasses();
 
-        $progressBar = null;
-
-        if($output->getVerbosity() < OutputInterface::VERBOSITY_VERBOSE)
-        {
-            $progressBar = new ProgressBar($output, count($duplicateIds));
-        }
-
-        foreach($duplicateIds as $duplicateId)
-        {
-            $output->writeln("Replacing all instances of asset $duplicateId", OutputInterface::VERBOSITY_VERBOSE);
-
-            if($duplicateId != $baseAsset->getId())
-            {
-                $this->replaceAsset($duplicateId, $baseAsset, $imageGalleryClasses);
-                $this->checkAssetDependencyAndDelete($duplicateId);
-            }
-
-            $progressBar?->advance();
-        }
-        
-        $output->writeln("");
+        $this->removeDuplicates($duplicateIds, $baseAsset, $removalLimit);
 
         return 0;
     }
@@ -201,6 +179,46 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         }
 
         return $imageGalleryFields;
+    }
+
+    /**
+     * @param int[] $duplicateIds
+     */
+    private function removeDuplicates(array $duplicateIds, Asset $baseAsset, int $limit)
+    {
+        $imageGalleryClasses = $this->getImageGalleryClasses();
+        
+        $progressBar = null;
+
+        if($this->output->getVerbosity() < OutputInterface::VERBOSITY_VERBOSE)
+        {
+            $progressBar = new ProgressBar($this->output, min(count($duplicateIds), $limit));
+        }
+
+        $count = 0;
+
+        foreach($duplicateIds as $duplicateId)
+        {
+            $this->output->writeln("Replacing all instances of asset $duplicateId", OutputInterface::VERBOSITY_VERBOSE);
+
+            if($duplicateId != $baseAsset->getId())
+            {
+                $this->replaceAsset($duplicateId, $baseAsset, $imageGalleryClasses);
+                $this->checkAssetDependencyAndDelete($duplicateId);
+            }
+
+            $progressBar?->advance();
+            $count++;
+
+            if($count >= $limit)
+            {
+                $this->output->writeln("");
+                $this->output->writeln("The limit ($limit duplicates) has been reached. Stopping here.");
+                return;
+            }
+        }
+        
+        $this->output->writeln("");
     }
 
     private function replaceAsset(int $oldAssetId, Asset $newAsset, array $imageGalleryClasses)
