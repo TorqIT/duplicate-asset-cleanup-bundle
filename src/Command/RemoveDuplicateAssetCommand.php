@@ -28,7 +28,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
     protected function configure()
     {
         $this
-            ->setName('torq:cleanup:most-duplicated-asset')
+            ->setName('torq:cleanup:duplicate-assets')
             ->setDescription('Removes all duplicates for whichever asset has the most duplicates and updates all references' .
                 ' to that asset to point to the new unified asset.')
             ->addOption(self::ASSET_ID_OPTION, ["a", "i"], InputOption::VALUE_REQUIRED, "The ID of a specific asset that should have its duplicates removed." . 
@@ -52,9 +52,9 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
         $hash = $targetAssetId > 0 ? $this->getAssetHash($targetAssetId) : $this->getHashWithMostDuplicates();
         $duplicateIds = $this->getDuplicateAssetsForHash($hash);
-        $duplicateCount = count($duplicateIds);
+        $duplicateCount = count($duplicateIds) - 1; //-1 to account for the base asset being on this list
 
-        if($duplicateCount === 1)
+        if($duplicateCount === 0)
         {
             $this->output->writeln($targetAssetId > 0 ? "Specified asset has no duplicates!" : "No duplicate assets detected!" );
             return 0;
@@ -192,7 +192,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
         if($this->output->getVerbosity() < OutputInterface::VERBOSITY_VERBOSE)
         {
-            $progressBar = new ProgressBar($this->output, min(count($duplicateIds), $limit));
+            $progressBar = new ProgressBar($this->output, $limit > 0 ? min(count($duplicateIds) - 1, $limit) : count($duplicateIds) - 1);
         }
 
         $count = 0;
@@ -205,12 +205,12 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             {
                 $this->replaceAsset($duplicateId, $baseAsset, $imageGalleryClasses);
                 $this->checkAssetDependencyAndDelete($duplicateId);
+                $progressBar?->advance();
+                $count++;
             }
 
-            $progressBar?->advance();
-            $count++;
 
-            if($count >= $limit)
+            if($limit > 0 && $count >= $limit)
             {
                 $this->output->writeln("");
                 $this->output->writeln("The limit ($limit duplicates) has been reached. Stopping here.");
