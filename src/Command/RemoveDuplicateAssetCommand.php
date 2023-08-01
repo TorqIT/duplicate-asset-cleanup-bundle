@@ -13,23 +13,34 @@ use Pimcore\Model\DataObject\Concrete;
 use Pimcore\Model\DataObject\Data\Hotspotimage;
 use Pimcore\Model\DataObject\Data\ImageGallery;
 use Pimcore\Model\DataObject\Listing;
+use Pimcore\Model\Exception\NotFoundException;
 use Symfony\Component\Console\Helper\ProgressBar;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ConfirmationQuestion;
 
 class RemoveDuplicateAssetCommand extends AbstractCommand
 {
+    private const ASSET_ID_OPTION = "asset-id";
+    private const LIMIT_OPTION = "limit";
+
     protected function configure()
     {
         $this
             ->setName('torq:cleanup:most-duplicated-asset')
             ->setDescription('Removes all duplicates for whichever asset has the most duplicates and updates all references' .
-        ' to that asset to point to the new unified asset.');
+                ' to that asset to point to the new unified asset.')
+            ->addOption(self::ASSET_ID_OPTION, ["a", "i"], InputOption::VALUE_REQUIRED, "The ID of a specific asset that should have its duplicates removed." . 
+                " (Note: given asset may not be selected as the base asset)")
+            ->addOption(self::LIMIT_OPTION, "l", InputOption::VALUE_REQUIRED, "A numeric limit on how many duplicates should be deleted");
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
+        $targetAssetId = intval($input->getOption(self::ASSET_ID_OPTION));
+        $removalLimit = intval($input->getOption(self::LIMIT_OPTION));
+
         // TODO query to see how many duplicate files before asking?
         $helper = $this->getHelper('question');
         $question = new ConfirmationQuestion('This command cannot be undone. Are you sure you want to continue? [Yes | No]: ', false, '/^Yes|Y/i');
@@ -39,18 +50,27 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             return 0;
         }
 
-        $result = $this->getHashWithMostDuplicates();
+        $hash = $targetAssetId > 0 ? $this->getAssetHash($targetAssetId) : $this->getHashWithMostDuplicates();
+        $duplicateIds = $this->getDuplicateAssetsForHash($hash);
+        $duplicateCount = count($duplicateIds);
 
-        if($result["total"] === 1)
+        if($duplicateCount === 1)
         {
-            $this->output->writeln("No duplicate assets detected!");
+            $this->output->writeln($targetAssetId > 0 ? "Specified asset has no duplicates!" : "No duplicate assets detected!" );
             return 0;
         }
 
-        $duplicateIds = $this->getDuplicateAssetsForHash($result["binaryFileHash"]);
         $baseAsset = $this->findFirstValidAsset($duplicateIds);
 
-        $this->output->writeln("Found asset ({$baseAsset->getKey()}) with {$result["total"]} duplicates");
+        if($targetAssetId > 0)
+        {
+            $this->output->writeln("Specified asset has $duplicateCount duplicates. Using {$baseAsset->getKey()} as the unified asset.");
+        }
+        else 
+        {
+            $this->output->writeln("Found asset ({$baseAsset->getKey()}) with $duplicateCount duplicates");
+        }
+        
         $imageGalleryClasses = $this->getImageGalleryClasses();
 
         $progressBar = null;
@@ -78,19 +98,34 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         return 0;
     }
 
-    private function getHashWithMostDuplicates()
+    private function getAssetHash($targetAssetId)
     {
         return Db::get()->createQueryBuilder()
-            ->select("groupedVersions.binaryFileHash", "COUNT(1) AS total")
+            ->select("groupedVersions.binaryFileHash")
             ->from("versions", "groupedVersions")
             ->innerJoin("groupedVersions", "({$this->buildMostRecenVersionSubquery()})", "maxVersion", 
                 "groupedVersions.cid = maxVersion.cid AND groupedVersions.versionCount = maxVersion.version")
             ->innerJoin("groupedVersions", "assets", "assets", "assets.id = groupedVersions.cid")
+            ->where("groupedVersions.ctype = 'asset' AND groupedVersions.cid = ?")
+            ->setParameter(0, $targetAssetId)
+            ->execute()
+            ->fetchOne();
+    }
+
+    private function getHashWithMostDuplicates()
+    {
+        return Db::get()->createQueryBuilder()
+            ->select("groupedVersions.binaryFileHash")
+            ->from("versions", "groupedVersions")
+            ->innerJoin("groupedVersions", "({$this->buildMostRecenVersionSubquery()})", "maxVersion", 
+                "groupedVersions.cid = maxVersion.cid AND groupedVersions.versionCount = maxVersion.version")
+            ->innerJoin("groupedVersions", "assets", "assets", "assets.id = groupedVersions.cid")
+            ->where("groupedVersions.ctype = 'asset'")
             ->groupBy("groupedVersions.binaryFileHash")
-            ->orderBy("total", "DESC")
+            ->orderBy("COUNT(1)", "DESC")
             ->setMaxResults(1)
             ->execute()
-            ->fetchAssociative();
+            ->fetchOne();
     }
 
     /** @return int[] */
