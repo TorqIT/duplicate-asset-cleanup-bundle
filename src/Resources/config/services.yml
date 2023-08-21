@@ -13,8 +13,10 @@ services:
         resource: '../../Command/**/*Command.php'
         tags: ['console.command']
 
-   TorqIT\DuplicateAssetCleanupBundle\DuplicateAssetCleanupBundleInstaller:
-       public: true
+    TorqIT\DuplicateAssetCleanupBundle\Installer:
+        public: true
+        arguments:
+            $bundle: "@=service('kernel').getBundle('TorqITDuplicateAssetCleanupBundle')"
 
 # add more services, or override services that need manual wiring
 #    TorqIT\DuplicateAssetCleanupBundle\ExampleClass:

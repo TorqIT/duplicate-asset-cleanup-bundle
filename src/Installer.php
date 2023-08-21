@@ -7,7 +7,7 @@ namespace TorqIT\DuplicateAssetCleanupBundle;
 use Pimcore\Db;
 use Pimcore\Extension\Bundle\Installer\SettingsStoreAwareInstaller;
 
-class DuplicateAssetCleanupBundleInstaller extends SettingsStoreAwareInstaller
+class Installer extends SettingsStoreAwareInstaller
 {
     const INDEX_NAME = 'IX_versions_binaryFileHas_binaryFileId';
 
