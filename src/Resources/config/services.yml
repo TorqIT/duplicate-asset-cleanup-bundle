@@ -9,12 +9,12 @@ services:
         # if you need to do this, you can override this setting on individual services
         public: false
 
-    # controllers are imported separately to make sure they're public
-    # and have a tag that allows actions to type-hint services
-    TorqIT\DuplicateAssetCleanupBundle\Controller\:
-        resource: '../../Controller'
-        public: true
-        tags: ['controller.service_arguments']
+    TorqIT\DuplicateAssetCleanupBundle\Command\:
+        resource: '../../Command/**/*Command.php'
+        tags: ['console.command']
+
+#    TorqIT\DuplicateAssetCleanupBundle\DuplicateAssetCleanupBundleInstaller:
+#        public: true
 
 #    TorqIT\DuplicateAssetCleanupBundle\DuplicateAssetCleanupBundleInstaller:
 #        public: true
