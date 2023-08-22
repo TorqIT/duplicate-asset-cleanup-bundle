@@ -50,9 +50,18 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             return 0;
         }
 
+        $time = time();
+        $this->output->writeln("$time - beginning execution.", OutputInterface::VERBOSITY_VERBOSE);
+
         $hash = $targetAssetId > 0 ? $this->getAssetHash($targetAssetId) : $this->getHashWithMostDuplicates();
+        $time = time();
+        $this->output->writeln("$time - Hash with most duplicates: $hash", OutputInterface::VERBOSITY_VERBOSE);
+
         $duplicateIds = $this->getDuplicateAssetsForHash($hash);
         $duplicateCount = count($duplicateIds) - 1; //-1 to account for the base asset being on this list
+        $time = time();
+        $this->output->writeln("$time - Duplicates found: $duplicateCount}", OutputInterface::VERBOSITY_VERBOSE);
+
 
         if($duplicateCount === 0)
         {
@@ -61,6 +70,9 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         }
 
         $baseAsset = $this->findFirstValidAsset($duplicateIds);
+
+        $time = time();
+        $this->output->writeln("$time - Base asset found: {$baseAsset->getKey()}", OutputInterface::VERBOSITY_VERBOSE);
 
         if($targetAssetId > 0)
         {
@@ -78,21 +90,23 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
     private function getAssetHash($targetAssetId)
     {
-        return Db::get()->createQueryBuilder()
+        $query =  Db::get()->createQueryBuilder()
             ->select("groupedVersions.binaryFileHash")
             ->from("versions", "groupedVersions")
             ->innerJoin("groupedVersions", "({$this->buildMostRecenVersionSubquery()})", "maxVersion", 
                 "groupedVersions.cid = maxVersion.cid AND groupedVersions.versionCount = maxVersion.version")
             ->innerJoin("groupedVersions", "assets", "assets", "assets.id = groupedVersions.cid")
             ->where("groupedVersions.ctype = 'asset' AND groupedVersions.cid = ?")
-            ->setParameter(0, $targetAssetId)
+            ->setParameter(0, $targetAssetId);
+        $result = $query
             ->execute()
             ->fetchOne();
+        return $result;
     }
 
     private function getHashWithMostDuplicates()
     {
-        return Db::get()->createQueryBuilder()
+        $query = Db::get()->createQueryBuilder()
             ->select("groupedVersions.binaryFileHash")
             ->from("versions", "groupedVersions")
             ->innerJoin("groupedVersions", "({$this->buildMostRecenVersionSubquery()})", "maxVersion", 
@@ -101,24 +115,28 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->where("groupedVersions.ctype = 'asset'")
             ->groupBy("groupedVersions.binaryFileHash")
             ->orderBy("COUNT(1)", "DESC")
-            ->setMaxResults(1)
+            ->setMaxResults(1);
+        $result = $query
             ->execute()
             ->fetchOne();
+        return $result;
     }
 
     /** @return int[] */
     private function getDuplicateAssetsForHash(string $hash)
     {
-        return Db::get()->createQueryBuilder()
+        $query = Db::get()->createQueryBuilder()
             ->select("versions.cid")
             ->from("versions")
             ->innerJoin("versions", "({$this->buildMostRecenVersionSubquery()})", "maxVersion",
                 "versions.cid = maxVersion.cid AND versions.versionCount = maxVersion.version")
             ->where("binaryFileHash = ?")
             ->orderBy("versions.cid")
-            ->setParameter(0, $hash)
+            ->setParameter(0, $hash);
+        $result = $query
             ->execute()
             ->fetchFirstColumn();
+        return $result;
     }
 
     //We can't just query the version table raw since a single asset with 30 versions will show
@@ -126,12 +144,13 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
     // the latest version of each asset (which will for sure have the latest binaryFileHash)
     private function buildMostRecenVersionSubquery()
     {
-        return Db::get()->createQueryBuilder()
+        $sql =  Db::get()->createQueryBuilder()
             ->select("cid", "MAX(versionCount) as version")
             ->from("versions")
             ->where("ctype = 'asset'")
             ->groupBy("cid")
             ->getSQL();
+        return $sql;
     }
 
     /** @param int[] $assetIds */
@@ -140,6 +159,10 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         foreach($assetIds as $assetId)
         {
             $asset = Asset::getById($assetId);
+
+            if ($asset == null) {
+                $this->output->writeln("Asset $assetId could not be found, might be orphaned.");
+            }
 
             if($asset->getData())
             {
@@ -199,7 +222,8 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
         foreach($duplicateIds as $duplicateId)
         {
-            $this->output->writeln("Replacing all instances of asset $duplicateId", OutputInterface::VERBOSITY_VERBOSE);
+            $time = time();
+            $this->output->writeln("$time - Replacing all instances of asset $duplicateId", OutputInterface::VERBOSITY_VERBOSE);
 
             if($duplicateId != $baseAsset->getId())
             {
