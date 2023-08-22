@@ -60,7 +60,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         $duplicateIds = $this->getDuplicateAssetsForHash($hash);
         $duplicateCount = count($duplicateIds) - 1; //-1 to account for the base asset being on this list
         $time = time();
-        $this->output->writeln("$time - Duplicates found: $duplicateCount}", OutputInterface::VERBOSITY_VERBOSE);
+        $this->output->writeln("$time - Duplicates found: $duplicateCount", OutputInterface::VERBOSITY_VERBOSE);
 
 
         if($duplicateCount === 0)
@@ -162,6 +162,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
             if ($asset == null) {
                 $this->output->writeln("Asset $assetId could not be found, might be orphaned.");
+                continue;
             }
 
             if($asset->getData())
@@ -194,7 +195,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             if(!empty($classGalleryFields))
             {
                 $imageGalleryFields[] = [
-                    "className" => $def->getName(),
+                    "className" => ucfirst($def->getName()),
                     "tableId" => $def->getId(),
                     "fields" => $classGalleryFields
                 ];
@@ -241,7 +242,17 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
                 return;
             }
         }
-        
+
+        $filename = $baseAsset->getFilename();
+        $extension = pathinfo($filename, PATHINFO_EXTENSION);
+        $newFileName = "{$baseAsset->getId()}.$extension";
+
+        $time = time();
+        $this->output->writeln("$time - All instances of {$baseAsset->getKey()} has been pointed back to the $newFileName", OutputInterface::VERBOSITY_VERBOSE);
+
+        $baseAsset->setKey($newFileName);
+        $baseAsset->save();
+
         $this->output->writeln("");
     }
 
@@ -287,6 +298,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
      */
     private function replaceAssetReferencesInImageGalleries(int $oldAssetId, Asset $newAsset, array $objects, array $galleryFields)
     {
+        $count = 0;
         foreach($objects as $object)
         {
             foreach($galleryFields as $field)
@@ -300,10 +312,14 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
                     $items = $imageGallery->getItems();
                     $items[$assetIndex] = new Hotspotimage($newAsset);
                     $imageGallery->setItems($items);
+                    $count++;
                 }   
             }
 
             $object->save();
+
+            $time = time();
+            $this->output->writeln("$time - replaced $count instances of asset $oldAssetId with reference to {$newAsset->getId()}");
         }
     }
 
@@ -323,6 +339,11 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
     private function checkAssetDependencyAndDelete($assetId)
     {
         $asset = Asset::getById($assetId);
+
+        if ($asset == null) {
+            $this->output->writeln("Asset $assetId could not be found, no need to delete. Versions are orphaned.");
+            return;
+        }
 
         $count = Db::get()->createQueryBuilder()
             ->select("COUNT(1)")
