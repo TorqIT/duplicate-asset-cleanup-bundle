@@ -289,6 +289,8 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
         $listing->setCondition("deps.targetid = ? AND deps.targettype = 'asset' AND deps.sourcetype = 'object'", [$assetId]);
 
+        $listing->setUnpublished(true);
+
         return $listing->load();
     }
 
