@@ -362,6 +362,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         else
         {
             $asset->delete();
+            $this->deleteOrphanedVersion($assetId);
         }
     }
 
