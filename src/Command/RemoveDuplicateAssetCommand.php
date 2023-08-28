@@ -2,9 +2,7 @@
 
 namespace TorqIT\DuplicateAssetCleanupBundle\Command;
 
-use Codeception\Lib\Console\Output;
 use Exception;
-use Pimcore;
 use Pimcore\Console\AbstractCommand;
 use Pimcore\Db;
 use Pimcore\Model\Asset;
@@ -13,7 +11,7 @@ use Pimcore\Model\DataObject\Concrete;
 use Pimcore\Model\DataObject\Data\Hotspotimage;
 use Pimcore\Model\DataObject\Data\ImageGallery;
 use Pimcore\Model\DataObject\Listing;
-use Pimcore\Model\Exception\NotFoundException;
+use Pimcore\Model\Version;
 use Symfony\Component\Console\Helper\ProgressBar;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -343,7 +341,8 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         $asset = Asset::getById($assetId);
 
         if ($asset == null) {
-            $this->output->writeln("Asset $assetId could not be found, no need to delete. Versions are orphaned.");
+            $this->output->writeln("Asset $assetId could not be found, deleting orphaned versions instead.");
+            $this->deleteOrphanedVersion($assetId);
             return;
         }
 
@@ -363,6 +362,22 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         else
         {
             $asset->delete();
+        }
+    }
+
+    private function deleteOrphanedVersion(int $assetId): void {
+        $versions = new Version\Listing();
+        $versions->setCondition('cid = :cid AND ctype = :ctype', [
+            'cid' => $assetId,
+            'ctype' => 'asset',
+        ]);
+
+        foreach ($versions as $version) {
+            try {
+                $version->delete();
+            } catch (\Exception $e) {
+                $this->output->writeln("Problem deleting the version with Id: {$version->getId()}, reason: {$e->getMessage()}");
+            }
         }
     }
 }
