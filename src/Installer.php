@@ -11,7 +11,7 @@ class Installer extends SettingsStoreAwareInstaller
 {
     const INDEX_NAME = 'IX_versions_binaryFileHas_binaryFileId';
 
-    public function install()
+    public function install() : void
     {
         $this->safelyRemoveIndex();
 
@@ -22,17 +22,13 @@ class Installer extends SettingsStoreAwareInstaller
         Db::get()->query($proc, self::INDEX_NAME);
 
         parent::install();
-
-        return true;
     }
 
-    public function uninstall()
+    public function uninstall() : void
     {
         $this->safelyRemoveIndex();
 
         parent::uninstall();
-
-        return true;
     }
 
     private function safelyRemoveIndex()
