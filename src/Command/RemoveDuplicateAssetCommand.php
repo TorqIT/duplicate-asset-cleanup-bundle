@@ -22,6 +22,9 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 {
     private const ASSET_ID_OPTION = "asset-id";
     private const LIMIT_OPTION = "limit";
+    private const DATA_OBJECT_SAVE_ARGUMENTS_OPTION = "data-object-save-arguments";
+
+    private string|null $dataObjectSaveArguments;
 
     protected function configure()
     {
@@ -31,13 +34,15 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
                 ' to that asset to point to the new unified asset.')
             ->addOption(self::ASSET_ID_OPTION, ["a", "i"], InputOption::VALUE_REQUIRED, "The ID of a specific asset that should have its duplicates removed." . 
                 " (Note: given asset may not be selected as the base asset)")
-            ->addOption(self::LIMIT_OPTION, "l", InputOption::VALUE_REQUIRED, "A numeric limit on how many duplicates should be deleted");
+            ->addOption(self::LIMIT_OPTION, "l", InputOption::VALUE_REQUIRED, "A numeric limit on how many duplicates should be deleted")
+            ->addOption(self::DATA_OBJECT_SAVE_ARGUMENTS_OPTION, 'd', InputOption::VALUE_OPTIONAL, 'comma separated list of argument strings to pass to the data object save call (i.e. saveVersionOnly)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $targetAssetId = intval($input->getOption(self::ASSET_ID_OPTION));
         $removalLimit = intval($input->getOption(self::LIMIT_OPTION));
+        $this->dataObjectSaveArguments = $input->getOption(self::DATA_OBJECT_SAVE_ARGUMENTS_OPTION);
 
         // TODO query to see how many duplicate files before asking?
         $helper = $this->getHelper('question');
@@ -316,7 +321,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
                 }   
             }
 
-            $object->save();
+            $object->save($this->dataObjectSaveArguments != null && $this->dataObjectSaveArguments != "" ? explode(",", $this->dataObjectSaveArguments) : []);
 
             $time = time();
             $this->output->writeln("$time - replaced $count instances of asset $oldAssetId with reference to {$newAsset->getId()}");
