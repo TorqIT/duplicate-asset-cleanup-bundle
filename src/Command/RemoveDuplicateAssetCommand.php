@@ -321,8 +321,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
                 }   
             }
 
-            $hasParams = $this->saveParams != null && $this->saveParams != "" && str_contains($this->saveParams, ",");
-            $object->save($hasParams ? explode(",", $this->saveParams) : []);
+            $object->save($this->saveParams != null && $this->saveParams != "" ? explode(",", $this->saveParams) : []);
 
             $time = time();
             $this->output->writeln("$time - replaced $count instances of asset $oldAssetId with reference to {$newAsset->getId()}");
