@@ -22,6 +22,9 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 {
     private const ASSET_ID_OPTION = "asset-id";
     private const LIMIT_OPTION = "limit";
+    private const SAVE_FLAGS_OPTION = "save-flags";
+
+    private string|null $saveParams;
 
     protected function configure()
     {
@@ -31,13 +34,15 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
                 ' to that asset to point to the new unified asset.')
             ->addOption(self::ASSET_ID_OPTION, ["a", "i"], InputOption::VALUE_REQUIRED, "The ID of a specific asset that should have its duplicates removed." . 
                 " (Note: given asset may not be selected as the base asset)")
-            ->addOption(self::LIMIT_OPTION, "l", InputOption::VALUE_REQUIRED, "A numeric limit on how many duplicates should be deleted");
+            ->addOption(self::LIMIT_OPTION, "l", InputOption::VALUE_REQUIRED, "A numeric limit on how many duplicates should be deleted")
+            ->addOption(self::SAVE_FLAGS_OPTION, 'f', InputOption::VALUE_OPTIONAL, 'just update specific classes, use "," (comma) to execute more than one class');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $targetAssetId = intval($input->getOption(self::ASSET_ID_OPTION));
         $removalLimit = intval($input->getOption(self::LIMIT_OPTION));
+        $this->saveParams = $input->getOption(self::SAVE_FLAGS_OPTION);
 
         // TODO query to see how many duplicate files before asking?
         $helper = $this->getHelper('question');
@@ -316,7 +321,8 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
                 }   
             }
 
-            $object->save();
+            $hasParams = $this->saveParams != null && $this->saveParams != "" && str_contains($this->saveParams, ",");
+            $object->save($hasParams ? explode(",", $this->saveParams) : []);
 
             $time = time();
             $this->output->writeln("$time - replaced $count instances of asset $oldAssetId with reference to {$newAsset->getId()}");
