@@ -32,7 +32,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->setName('torq:cleanup:duplicate-assets')
             ->setDescription('Removes all duplicates for whichever asset has the most duplicates and updates all references' .
                 ' to that asset to point to the new unified asset.')
-            ->addOption(self::ASSET_ID_OPTION, ["a", "i"], InputOption::VALUE_REQUIRED, "The ID of a specific asset that should have its duplicates removed." . 
+            ->addOption(self::ASSET_ID_OPTION, ["a", "i"], InputOption::VALUE_REQUIRED, "The ID of a specific asset that should have its duplicates removed." .
                 " (Note: given asset may not be selected as the base asset)")
             ->addOption(self::LIMIT_OPTION, "l", InputOption::VALUE_REQUIRED, "A numeric limit on how many duplicates should be deleted")
             ->addOption(self::DATA_OBJECT_SAVE_ARGUMENTS_OPTION, 'd', InputOption::VALUE_OPTIONAL, 'comma separated list of argument strings to pass to the data object save call (i.e. saveVersionOnly)');
@@ -55,8 +55,23 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
         $time = time();
         $this->output->writeln("$time - beginning execution.", OutputInterface::VERBOSITY_VERBOSE);
+        if ($removalLimit === 0 && $targetAssetId === 0) {
+            $hashes = $this->getAllHashesWithDuplicates();
 
-        $hash = $targetAssetId > 0 ? $this->getAssetHash($targetAssetId) : $this->getHashWithMostDuplicates();
+            foreach ($hashes as $hash) {
+                $this->handleDuplicateHash($hash["binaryFileHash"], $targetAssetId, $removalLimit);
+            }
+        } else {
+            $hash = $targetAssetId > 0 ? $this->getAssetHash($targetAssetId) : $this->getHashWithMostDuplicates();
+            $this->handleDuplicateHash($hash, $targetAssetId, $removalLimit);
+        }
+
+
+        return 0;
+    }
+
+    private function handleDuplicateHash(string $hash, int $targetAssetId, int $removalLimit)
+    {
         $time = time();
         $this->output->writeln("$time - Hash with most duplicates: $hash", OutputInterface::VERBOSITY_VERBOSE);
 
@@ -66,9 +81,8 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         $this->output->writeln("$time - Duplicates found: $duplicateCount", OutputInterface::VERBOSITY_VERBOSE);
 
 
-        if($duplicateCount === 0)
-        {
-            $this->output->writeln($targetAssetId > 0 ? "Specified asset has no duplicates!" : "No duplicate assets detected!" );
+        if ($duplicateCount === 0) {
+            $this->output->writeln($targetAssetId > 0 ? "Specified asset has no duplicates!" : "No duplicate assets detected!");
             return 0;
         }
 
@@ -77,18 +91,13 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         $time = time();
         $this->output->writeln("$time - Base asset found: {$baseAsset->getKey()}", OutputInterface::VERBOSITY_VERBOSE);
 
-        if($targetAssetId > 0)
-        {
+        if ($targetAssetId > 0) {
             $this->output->writeln("Specified asset has $duplicateCount duplicates. Using {$baseAsset->getKey()} as the unified asset.");
-        }
-        else 
-        {
+        } else {
             $this->output->writeln("Found asset ({$baseAsset->getKey()}) with $duplicateCount duplicates");
         }
 
         $this->removeDuplicates($duplicateIds, $baseAsset, $removalLimit);
-
-        return 0;
     }
 
     private function getAssetHash($targetAssetId)
@@ -96,8 +105,12 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         $query =  Db::get()->createQueryBuilder()
             ->select("groupedVersions.binaryFileHash")
             ->from("versions", "groupedVersions")
-            ->innerJoin("groupedVersions", "({$this->buildMostRecenVersionSubquery()})", "maxVersion", 
-                "groupedVersions.cid = maxVersion.cid AND groupedVersions.versionCount = maxVersion.version")
+            ->innerJoin(
+                "groupedVersions",
+                "({$this->buildMostRecenVersionSubquery()})",
+                "maxVersion",
+                "groupedVersions.cid = maxVersion.cid AND groupedVersions.versionCount = maxVersion.version"
+            )
             ->innerJoin("groupedVersions", "assets", "assets", "assets.id = groupedVersions.cid")
             ->where("groupedVersions.ctype = 'asset' AND groupedVersions.cid = ?")
             ->setParameter(0, $targetAssetId);
@@ -112,8 +125,12 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         $query = Db::get()->createQueryBuilder()
             ->select("groupedVersions.binaryFileHash")
             ->from("versions", "groupedVersions")
-            ->innerJoin("groupedVersions", "({$this->buildMostRecenVersionSubquery()})", "maxVersion", 
-                "groupedVersions.cid = maxVersion.cid AND groupedVersions.versionCount = maxVersion.version")
+            ->innerJoin(
+                "groupedVersions",
+                "({$this->buildMostRecenVersionSubquery()})",
+                "maxVersion",
+                "groupedVersions.cid = maxVersion.cid AND groupedVersions.versionCount = maxVersion.version"
+            )
             ->innerJoin("groupedVersions", "assets", "assets", "assets.id = groupedVersions.cid")
             ->where("groupedVersions.ctype = 'asset'")
             ->groupBy("groupedVersions.binaryFileHash")
@@ -125,14 +142,40 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         return $result;
     }
 
+    private function getAllHashesWithDuplicates()
+    {
+        $query = Db::get()->createQueryBuilder()
+            ->select("groupedVersions.binaryFileHash")
+            ->from("versions", "groupedVersions")
+            ->innerJoin(
+                "groupedVersions",
+                "({$this->buildMostRecenVersionSubquery()})",
+                "maxVersion",
+                "groupedVersions.cid = maxVersion.cid AND groupedVersions.versionCount = maxVersion.version"
+            )
+            ->innerJoin("groupedVersions", "assets", "assets", "assets.id = groupedVersions.cid")
+            ->where("groupedVersions.ctype = 'asset'")
+            ->groupBy("groupedVersions.binaryFileHash")
+            ->orderBy("COUNT(1)", "DESC")
+            ->having("COUNT(1) > 1");
+        $result = $query
+            ->execute()
+            ->fetchAll();
+        return $result;
+    }
+
     /** @return int[] */
     private function getDuplicateAssetsForHash(string $hash)
     {
         $query = Db::get()->createQueryBuilder()
             ->select("versions.cid")
             ->from("versions")
-            ->innerJoin("versions", "({$this->buildMostRecenVersionSubquery()})", "maxVersion",
-                "versions.cid = maxVersion.cid AND versions.versionCount = maxVersion.version")
+            ->innerJoin(
+                "versions",
+                "({$this->buildMostRecenVersionSubquery()})",
+                "maxVersion",
+                "versions.cid = maxVersion.cid AND versions.versionCount = maxVersion.version"
+            )
             ->where("binaryFileHash = ?")
             ->orderBy("versions.cid")
             ->setParameter(0, $hash);
@@ -159,8 +202,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
     /** @param int[] $assetIds */
     private function findFirstValidAsset(array $assetIds)
     {
-        foreach($assetIds as $assetId)
-        {
+        foreach ($assetIds as $assetId) {
             $asset = Asset::getById($assetId);
 
             if ($asset == null) {
@@ -168,8 +210,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
                 continue;
             }
 
-            if($asset->getData())
-            {
+            if ($asset->getData()) {
                 return $asset;
             }
         }
@@ -183,20 +224,16 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
         $imageGalleryFields = [];
 
-        foreach($classDefinitions as $def)
-        {
+        foreach ($classDefinitions as $def) {
             $classGalleryFields = [];
 
-            foreach($def->getFieldDefinitions() as $field)
-            {
-                if($field->getFieldtype() === "imageGallery")
-                {
+            foreach ($def->getFieldDefinitions() as $field) {
+                if ($field->getFieldtype() === "imageGallery") {
                     $classGalleryFields[] = $field->getName();
                 }
             }
 
-            if(!empty($classGalleryFields))
-            {
+            if (!empty($classGalleryFields)) {
                 $imageGalleryFields[] = [
                     "className" => ucfirst($def->getName()),
                     "tableId" => $def->getId(),
@@ -214,23 +251,20 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
     private function removeDuplicates(array $duplicateIds, Asset $baseAsset, int $limit)
     {
         $imageGalleryClasses = $this->getImageGalleryClasses();
-        
+
         $progressBar = null;
 
-        if($this->output->getVerbosity() < OutputInterface::VERBOSITY_VERBOSE)
-        {
+        if ($this->output->getVerbosity() < OutputInterface::VERBOSITY_VERBOSE) {
             $progressBar = new ProgressBar($this->output, $limit > 0 ? min(count($duplicateIds) - 1, $limit) : count($duplicateIds) - 1);
         }
 
         $count = 0;
 
-        foreach($duplicateIds as $duplicateId)
-        {
+        foreach ($duplicateIds as $duplicateId) {
             $time = time();
             $this->output->writeln("$time - Replacing all instances of asset $duplicateId", OutputInterface::VERBOSITY_VERBOSE);
 
-            if($duplicateId != $baseAsset->getId())
-            {
+            if ($duplicateId != $baseAsset->getId()) {
                 $this->replaceAsset($duplicateId, $baseAsset, $imageGalleryClasses);
                 $this->checkAssetDependencyAndDelete($duplicateId);
                 $progressBar?->advance();
@@ -238,8 +272,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             }
 
 
-            if($limit > 0 && $count >= $limit)
-            {
+            if ($limit > 0 && $count >= $limit) {
                 $this->output->writeln("");
                 $this->output->writeln("The limit ($limit duplicates) has been reached. Stopping here.");
                 return;
@@ -261,13 +294,11 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
     private function replaceAsset(int $oldAssetId, Asset $newAsset, array $imageGalleryClasses)
     {
-        foreach($imageGalleryClasses as $galleryClass)
-        {   
+        foreach ($imageGalleryClasses as $galleryClass) {
             $objects = $this->getObjectsThatReferenceAsset($oldAssetId, $galleryClass["className"], $galleryClass["tableId"]);
             $count = count($objects);
-            
-            if($count > 0)
-            {
+
+            if ($count > 0) {
                 $this->replaceAssetReferencesInImageGalleries($oldAssetId, $newAsset, $objects, $galleryClass["fields"]);
             }
         }
@@ -276,7 +307,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
     /**
      *  @param string[] $galleryFields 
      *  @return Concrete[]
-    */
+     */
     private function getObjectsThatReferenceAsset(int $assetId, string $className, string $tableId)
     {
         $listingClass = "Pimcore\Model\DataObject\\$className\Listing";
@@ -285,7 +316,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         $listing = new $listingClass();
 
         $listing->onCreateQueryBuilder(
-            function (\Doctrine\DBAL\Query\QueryBuilder $queryBuilder) use($tableId) {
+            function (\Doctrine\DBAL\Query\QueryBuilder $queryBuilder) use ($tableId) {
                 $queryBuilder->innerJoin("object_$tableId", 'dependencies', 'deps', 'oo_id = deps.sourceid');
             }
         );
@@ -304,21 +335,18 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
     private function replaceAssetReferencesInImageGalleries(int $oldAssetId, Asset $newAsset, array $objects, array $galleryFields)
     {
         $count = 0;
-        foreach($objects as $object)
-        {
-            foreach($galleryFields as $field)
-            {
+        foreach ($objects as $object) {
+            foreach ($galleryFields as $field) {
                 /** @var ImageGallery */
                 $imageGallery = $object->get($field);
                 $assetIndex = $this->findAssetIndex($imageGallery, $oldAssetId);
 
-                if($assetIndex !== null)
-                {
+                if ($assetIndex !== null) {
                     $items = $imageGallery->getItems();
                     $items[$assetIndex] = new Hotspotimage($newAsset);
                     $imageGallery->setItems($items);
                     $count++;
-                }   
+                }
             }
 
             $object->save($this->dataObjectSaveArguments != null && $this->dataObjectSaveArguments != "" ? explode(",", $this->dataObjectSaveArguments) : []);
@@ -330,10 +358,8 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
     private function findAssetIndex(ImageGallery $gallery, int $targetId)
     {
-        foreach($gallery->getItems() as $index => $item)
-        {
-            if($item->getImage()->getId() === $targetId)
-            {
+        foreach ($gallery->getItems() as $index => $item) {
+            if ($item->getImage()->getId() === $targetId) {
                 return $index;
             }
         }
@@ -359,19 +385,17 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->execute()
             ->fetchOne();
 
-        if($count > 0)
-        {
+        if ($count > 0) {
             $this->output->writeln("");
             $this->output->writeln("<comment>WARNING: {$asset->getKey()} still has $count dependencies and will not be deleted</comment>");
-        }
-        else
-        {
+        } else {
             $asset->delete();
             $this->deleteOrphanedVersion($assetId);
         }
     }
 
-    private function deleteOrphanedVersion(int $assetId): void {
+    private function deleteOrphanedVersion(int $assetId): void
+    {
         $versions = new Version\Listing();
         $versions->setCondition('cid = :cid AND ctype = :ctype', [
             'cid' => $assetId,
