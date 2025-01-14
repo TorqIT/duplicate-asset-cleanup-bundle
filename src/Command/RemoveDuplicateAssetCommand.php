@@ -80,13 +80,14 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         $time = time();
         $this->output->writeln("$time - Duplicates found: $duplicateCount", OutputInterface::VERBOSITY_VERBOSE);
 
-
         if ($duplicateCount === 0) {
             $this->output->writeln($targetAssetId > 0 ? "Specified asset has no duplicates!" : "No duplicate assets detected!");
             return 0;
         }
 
         $baseAsset = $this->findFirstValidAsset($duplicateIds);
+
+        if (!$baseAsset) return;
 
         $time = time();
         $this->output->writeln("$time - Base asset found: {$baseAsset->getKey()}", OutputInterface::VERBOSITY_VERBOSE);
@@ -215,7 +216,11 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             }
         }
 
-        throw new Exception("None of the duplicate assets have an associated file that actually exists");
+        $commaSeparatedIds = implode(', ', $assetIds);
+
+        $this->output->writeln("None of the duplicate assets($commaSeparatedIds) have an associated file that actually exists");
+
+        return null;
     }
 
     private function getImageGalleryClasses()
