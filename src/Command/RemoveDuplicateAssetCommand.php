@@ -80,7 +80,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         $duplicateCount = count($duplicateIds) - 1; //-1 to account for the base asset being on this list
         $time = time();
         $this->output->writeln("$time - Duplicates found: $duplicateCount", OutputInterface::VERBOSITY_VERBOSE);
-
+      
         if ($duplicateCount === 0) {
             $this->output->writeln($targetAssetId > 0 ? "Specified asset has no duplicates!" : "No duplicate assets detected!");
             return 0;
@@ -212,7 +212,6 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
                     $this->output->writeln("Asset $assetId could not be found, might be orphaned.");
                     continue;
                 }
-
                 if ($asset->getData()) {
                     return $asset;
                 }
