@@ -6,6 +6,7 @@ use Exception;
 use Pimcore\Console\AbstractCommand;
 use Pimcore\Db;
 use Pimcore\Model\Asset;
+use Pimcore\Model\Asset\Image;
 use Pimcore\Model\DataObject\ClassDefinition;
 use Pimcore\Model\DataObject\Concrete;
 use Pimcore\Model\DataObject\Data\Hotspotimage;
@@ -79,14 +80,15 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         $duplicateCount = count($duplicateIds) - 1; //-1 to account for the base asset being on this list
         $time = time();
         $this->output->writeln("$time - Duplicates found: $duplicateCount", OutputInterface::VERBOSITY_VERBOSE);
-
-
+      
         if ($duplicateCount === 0) {
             $this->output->writeln($targetAssetId > 0 ? "Specified asset has no duplicates!" : "No duplicate assets detected!");
             return 0;
         }
 
         $baseAsset = $this->findFirstValidAsset($duplicateIds);
+
+        if (!$baseAsset) return;
 
         $time = time();
         $this->output->writeln("$time - Base asset found: {$baseAsset->getKey()}", OutputInterface::VERBOSITY_VERBOSE);
@@ -132,7 +134,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
                 "groupedVersions.cid = maxVersion.cid AND groupedVersions.versionCount = maxVersion.version"
             )
             ->innerJoin("groupedVersions", "assets", "assets", "assets.id = groupedVersions.cid")
-            ->where("groupedVersions.ctype = 'asset'")
+            ->where("groupedVersions.ctype = 'asset' AND assets.type = 'image'")
             ->groupBy("groupedVersions.binaryFileHash")
             ->orderBy("COUNT(1)", "DESC")
             ->setMaxResults(1);
@@ -153,7 +155,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
                 "maxVersion",
                 "groupedVersions.cid = maxVersion.cid AND groupedVersions.versionCount = maxVersion.version"
             )
-            ->innerJoin("groupedVersions", "assets", "assets", "assets.id = groupedVersions.cid")
+            ->innerJoin("groupedVersions", "assets", "assets", "assets.id = groupedVersions.cid AND assets.type ='image'")
             ->where("groupedVersions.ctype = 'asset'")
             ->groupBy("groupedVersions.binaryFileHash")
             ->orderBy("COUNT(1)", "DESC")
@@ -205,17 +207,22 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         foreach ($assetIds as $assetId) {
             $asset = Asset::getById($assetId);
 
-            if ($asset == null) {
-                $this->output->writeln("Asset $assetId could not be found, might be orphaned.");
-                continue;
-            }
-
-            if ($asset->getData()) {
-                return $asset;
+            if ($asset instanceof Image) {
+                if ($asset == null) {
+                    $this->output->writeln("Asset $assetId could not be found, might be orphaned.");
+                    continue;
+                }
+                if ($asset->getData()) {
+                    return $asset;
+                }
             }
         }
 
-        throw new Exception("None of the duplicate assets have an associated file that actually exists");
+        $commaSeparatedIds = implode(', ', $assetIds);
+
+        $this->output->writeln("None of the duplicate assets($commaSeparatedIds) have an associated file that actually exists");
+
+        return null;
     }
 
     private function getImageGalleryClasses()
