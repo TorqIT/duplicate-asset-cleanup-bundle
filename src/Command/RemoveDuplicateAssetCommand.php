@@ -41,17 +41,20 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
+        $noInteraction = $input->hasParameterOption(['--no-interaction', '-n']);
         $targetAssetId = intval($input->getOption(self::ASSET_ID_OPTION));
         $removalLimit = intval($input->getOption(self::LIMIT_OPTION));
         $this->dataObjectSaveArguments = $input->getOption(self::DATA_OBJECT_SAVE_ARGUMENTS_OPTION);
 
-        // TODO query to see how many duplicate files before asking?
-        $helper = $this->getHelper('question');
-        $question = new ConfirmationQuestion('This command cannot be undone. Are you sure you want to continue? [Yes | No]: ', false, '/^Yes|Y/i');
+        If (!$noInteraction) {
+            // TODO query to see how many duplicate files before asking?
+            $helper = $this->getHelper('question');
+            $question = new ConfirmationQuestion('This command cannot be undone. Are you sure you want to continue? [Yes | No]: ', false, '/^Yes|Y/i');
 
-        if (!$helper->ask($input, $output, $question)) {
-            $output->writeln("Command cancelled");
-            return 0;
+            if (!$helper->ask($input, $output, $question)) {
+                $output->writeln("Command cancelled");
+                return 0;
+            }
         }
 
         $time = time();
