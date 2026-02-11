@@ -1,5 +1,5 @@
 {
-    "license": "POCL",
+    "license": "proprietary",
     "name": "torqit/duplicate-asset-cleanup-bundle",
     "type": "pimcore-bundle",
     "require": {
