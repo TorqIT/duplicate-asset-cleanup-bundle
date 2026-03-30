@@ -12,4 +12,9 @@ class TorqITDuplicateAssetCleanupBundle extends AbstractPimcoreBundle
             '/bundles/torqitduplicateassetcleanup/js/pimcore/startup.js'
         ];
     }
+
+    public function getInstaller(): ?Installer
+    {
+        return $this->container->get(Installer::class);
+    }
 }
