@@ -1,43 +1,49 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace TorqIT\DuplicateAssetCleanupBundle;
 
-//use Doctrine\DBAL\Migrations\Version;
-//use Doctrine\DBAL\Schema\Schema;
 use Pimcore\Db;
 use Pimcore\Extension\Bundle\Installer\SettingsStoreAwareInstaller;
 
 class Installer extends SettingsStoreAwareInstaller
 {
-    const INDEX_NAME = 'IX_versions_binaryFileHas_binaryFileId';
+    private const INDEX_NAME = 'IX_versions_binaryFileHas_binaryFileId';
 
-    public function install() : void
+    public function install(): void
     {
         $this->safelyRemoveIndex();
-
-        $proc = <<<EOT
-        ALTER TABLE `Versions` ADD INDEX `?` (`binaryFileHash`, `binaryFileId`);
-        EOT;
-
-        Db::get()->query($proc, self::INDEX_NAME);
+        $this->createDatabaseIndex();
 
         parent::install();
     }
 
-    public function uninstall() : void
+    public function uninstall(): void
     {
         $this->safelyRemoveIndex();
 
         parent::uninstall();
     }
 
-    private function safelyRemoveIndex()
+    private function createDatabaseIndex(): void
     {
-        $indexCount = Db::get()->query('SHOW INDEX FROM `versions` WHERE `Key_name` = ?', self::INDEX_NAME);
+        $proc = <<<SQL
+        ALTER TABLE `versions` ADD INDEX `IX_versions_binaryFileHas_binaryFileId` (`binaryFileHash`, `binaryFileId`);
+        SQL;
 
-        if ($indexCount->rowCount() > 0) {
-            Db::get()->query('DROP INDEX ? ON `Versions`', self::INDEX_NAME);
-        }
+        Db::get()->executeStatement($proc);
     }
 
+    private function safelyRemoveIndex(): void
+    {
+        $indexCount = Db::get()->executeQuery(
+            'SHOW INDEX FROM `versions` WHERE `Key_name` = ?',
+            [self::INDEX_NAME]
+        );
+
+        if ($indexCount->rowCount() > 0) {
+            Db::get()->executeStatement(
+                'DROP INDEX `' . self::INDEX_NAME . '` ON `versions`'
+            );
+        }
+    }
 }

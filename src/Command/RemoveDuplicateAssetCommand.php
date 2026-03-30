@@ -39,7 +39,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->addOption(self::DATA_OBJECT_SAVE_ARGUMENTS_OPTION, 'd', InputOption::VALUE_OPTIONAL, 'comma separated list of argument strings to pass to the data object save call (i.e. saveVersionOnly)');
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $noInteraction = $input->hasParameterOption(['--no-interaction', '-n']);
         $targetAssetId = intval($input->getOption(self::ASSET_ID_OPTION));
@@ -48,6 +48,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
 
         If (!$noInteraction) {
             // TODO query to see how many duplicate files before asking?
+            /** @var QuestionHelper $helper */
             $helper = $this->getHelper('question');
             $question = new ConfirmationQuestion('This command cannot be undone. Are you sure you want to continue? [Yes | No]: ', false, '/^Yes|Y/i');
 
@@ -83,7 +84,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
         $duplicateCount = count($duplicateIds) - 1; //-1 to account for the base asset being on this list
         $time = time();
         $this->output->writeln("$time - Duplicates found: $duplicateCount", OutputInterface::VERBOSITY_VERBOSE);
-      
+
         if ($duplicateCount === 0) {
             $this->output->writeln($targetAssetId > 0 ? "Specified asset has no duplicates!" : "No duplicate assets detected!");
             return 0;
@@ -120,7 +121,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->where("groupedVersions.ctype = 'asset' AND groupedVersions.cid = ?")
             ->setParameter(0, $targetAssetId);
         $result = $query
-            ->execute()
+            ->executeQuery()
             ->fetchOne();
         return $result;
     }
@@ -142,7 +143,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->orderBy("COUNT(1)", "DESC")
             ->setMaxResults(1);
         $result = $query
-            ->execute()
+            ->executeQuery()
             ->fetchOne();
         return $result;
     }
@@ -164,8 +165,8 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->orderBy("COUNT(1)", "DESC")
             ->having("COUNT(1) > 1");
         $result = $query
-            ->execute()
-            ->fetchAll();
+            ->executeQuery()
+            ->fetchAllAssociative();
         return $result;
     }
 
@@ -185,7 +186,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->orderBy("versions.cid")
             ->setParameter(0, $hash);
         $result = $query
-            ->execute()
+            ->executeQuery()
             ->fetchFirstColumn();
         return $result;
     }
@@ -315,7 +316,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
     }
 
     /**
-     *  @param string[] $galleryFields 
+     *  @param string[] $galleryFields
      *  @return Concrete[]
      */
     private function getObjectsThatReferenceAsset(int $assetId, string $className, string $tableId)
@@ -392,7 +393,7 @@ class RemoveDuplicateAssetCommand extends AbstractCommand
             ->from("dependencies", "deps")
             ->where("targettype = 'asset' AND targetid = ?")
             ->setParameter(0, $assetId)
-            ->execute()
+            ->executeQuery()
             ->fetchOne();
 
         if ($count > 0) {

@@ -1,0 +1,104 @@
+pimcore_custom_reports:
+    definitions:
+        DuplicateAssets:
+            name: DuplicateAssets
+            sql: ''
+            dataSourceConfig:
+                -
+                    sql: "latestVersions.binaryFileHash AS `Hash`, COUNT(*) AS `Duplicate Count`, GROUP_CONCAT(assets.id ORDER BY assets.id SEPARATOR ', ') AS `Asset IDs`, GROUP_CONCAT(CONCAT(assets.path, assets.filename) ORDER BY assets.id SEPARATOR ', ') AS `Asset Paths`, MIN(assets.id) AS `Primary Asset ID`, SUBSTRING_INDEX(GROUP_CONCAT(CONCAT(assets.path, assets.filename) ORDER BY assets.id SEPARATOR ', '), ', ', 1) AS `Primary Asset Path` "
+                    from: "versions latestVersions INNER JOIN (SELECT cid, MAX(versionCount) as maxVersion FROM versions WHERE ctype = 'asset' GROUP BY cid) maxVersions ON latestVersions.cid = maxVersions.cid AND latestVersions.versionCount = maxVersions.maxVersion INNER JOIN assets ON assets.id = latestVersions.cid "
+                    where: "latestVersions.ctype = 'asset' AND latestVersions.binaryFileHash IS NOT NULL AND latestVersions.binaryFileHash != '' "
+                    groupby: 'latestVersions.binaryFileHash HAVING COUNT(*) > 1 '
+                    orderby: 'Duplicate Count'
+                    orderbydir: DESC
+                    type: sql
+            columnConfiguration:
+                -
+                    name: Hash
+                    disableOrderBy: false
+                    disableFilterable: false
+                    disableDropdownFilterable: false
+                    disableLabel: false
+                    display: true
+                    export: true
+                    order: true
+                    width: ''
+                    label: ''
+                    id: extModel401-19
+                -
+                    name: 'Duplicate Count'
+                    disableOrderBy: false
+                    disableFilterable: false
+                    disableDropdownFilterable: false
+                    disableLabel: false
+                    display: true
+                    export: true
+                    order: true
+                    width: ''
+                    label: ''
+                    id: extModel401-20
+                -
+                    name: 'Asset IDs'
+                    disableOrderBy: false
+                    disableFilterable: false
+                    disableDropdownFilterable: false
+                    disableLabel: false
+                    display: true
+                    export: true
+                    order: true
+                    width: ''
+                    label: ''
+                    id: extModel401-21
+                -
+                    name: 'Asset Paths'
+                    disableOrderBy: false
+                    disableFilterable: false
+                    disableDropdownFilterable: false
+                    disableLabel: false
+                    display: true
+                    export: true
+                    order: true
+                    width: ''
+                    label: ''
+                    id: extModel401-22
+                -
+                    name: 'Primary Asset ID'
+                    disableOrderBy: false
+                    disableFilterable: false
+                    disableDropdownFilterable: false
+                    disableLabel: false
+                    display: true
+                    export: true
+                    order: true
+                    width: ''
+                    label: ''
+                    id: extModel401-23
+                -
+                    name: 'Primary Asset Path'
+                    disableOrderBy: false
+                    disableFilterable: false
+                    disableDropdownFilterable: false
+                    disableLabel: false
+                    display: true
+                    export: true
+                    order: true
+                    width: ''
+                    label: ''
+                    id: extModel401-24
+            niceName: 'Duplicate Assets'
+            group: 'Asset Management'
+            groupIconClass: pimcore_icon_folder
+            iconClass: pimcore_icon_asset
+            menuShortcut: true
+            reportClass: ''
+            chartType: ''
+            pieColumn: null
+            pieLabelColumn: null
+            xAxis: null
+            yAxis: {  }
+            modificationDate: 1774893747
+            creationDate: 1774891177
+            shareGlobally: true
+            pagination: true
+            sharedUserNames: {  }
+            sharedRoleNames: {  }
